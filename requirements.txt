@@ -1,0 +1,9 @@
+insightface
+onnxruntime
+opencv-python
+numpy
+sqlalchemy
+psycopg2-binary
+python-dotenv
+python-multipart
+fastapi
