@@ -1,13 +1,26 @@
-#create_engine is used to create the connection between 
-#sqlAlchemy and PostgreSQL                                  
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
-URL_DATABASE='postgresql://postgres:2024@localhost:5432/clickplix'
+from sqlalchemy.orm import sessionmaker, declarative_base
+load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL")
+engine=create_engine(DATABASE_URL)
 
-engine=create_engine(URL_DATABASE)
+#print("database.py location:", BASE_DIR)
+SessionLocal=sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
+Base = declarative_base()
 
 
-SessionLocal=sessionmaker(autocommit=False,autoflash=False,bind=engine)
+def get_db():
+    db = SessionLocal()
 
-Base=declarative_base()
+    try:
+        yield db
+    finally:
+        db.close()
