@@ -11,6 +11,7 @@ class User(Base):
     id=Column(Integer,primary_key=True)
     name=Column(String)
     email=Column(VARCHAR(100),unique=True)
+    telegram_id=Column(String,unique=True,nullable=True)
 
     photos=relationship("FaceImage",back_populates="user")
 

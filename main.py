@@ -3,6 +3,8 @@ from database import engine,get_db,Base
 from models import User,FaceImage
 from fastapi import FastAPI,Depends,UploadFile,File,HTTPException
 from backend import register_face
+from backend import find_face
+from backend import send_photo
 import numpy as np
 app=FastAPI()
 
@@ -19,11 +21,13 @@ def home():
 def create_user(
     name:str,
     email:str,
+    telegram_id:str|None=None,
     db:Session=Depends(get_db)
 ):
     user=User(
         name=name,
-        email=email
+        email=email,
+        telegram_id=telegram_id
     )
 
     db.add(user)
@@ -62,3 +66,25 @@ async def add_face(
     }
 
 
+#writing endpoint to check if uploded face is in our database
+
+@app.post("/click")
+async def click(
+    file:UploadFile=File(...),
+    db:Session=Depends(get_db)
+):
+    image_path=f"uploads/{file.filename}"
+    with open(image_path,"wb") as buffer:
+        buffer.write(await file.read())
+    obj=find_face(db,image_path,0.5)
+    print("Object:", obj)
+    
+    if obj["found"]:
+        user=db.query(User).filter(User.id==obj["user_id"]).first()
+        print("Telegram ID:", user.telegram_id)
+        send_photo(
+            user.telegram_id,
+            image_path
+        )
+        
+    return obj

@@ -9,3 +9,5 @@ python-multipart
 fastapi
 uvicorn
 pgvector
+python-telegram-bot
+requests
