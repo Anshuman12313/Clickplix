@@ -6,6 +6,9 @@ from models import User,FaceImage
 import os
 from dotenv import load_dotenv
 import requests
+import secrets
+import string
+load_dotenv()
 BOT_TOKEN=os.getenv("TELEGRAM_BOT_TOKEN")
 app=FaceAnalysis(
     name="buffalo_l",
@@ -83,6 +86,12 @@ def send_photo(telegram_id,image_path,caption=None):
     return response.json()
 
 
+def generate_code(length=6):
+    character=string.ascii_uppercase+string.digits
+    return ''.join(
+        secrets.choice(character)
+        for _ in range(length)
+    )
 
 
 

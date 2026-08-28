@@ -1,10 +1,12 @@
 from sqlalchemy.orm import Session
 from database import engine,get_db,Base
-from models import User,FaceImage
+from models import User,FaceImage,RegistrationToken
 from fastapi import FastAPI,Depends,UploadFile,File,HTTPException
 from backend import register_face
 from backend import find_face
 from backend import send_photo
+from backend import generate_code
+from datetime import datetime, timedelta
 import numpy as np
 app=FastAPI()
 
@@ -21,17 +23,31 @@ def home():
 def create_user(
     name:str,
     email:str,
-    telegram_id:str|None=None,
     db:Session=Depends(get_db)
 ):
     user=User(
         name=name,
         email=email,
-        telegram_id=telegram_id
     )
 
     db.add(user)
     db.commit()
+    db.refresh(user)
+
+    code=generate_code()
+
+    token=RegistrationToken(
+        code=code,
+        user_id=user.id,
+        expires_at=datetime.utcnow()+timedelta(minutes=10)
+    )
+    db.add(token)
+    db.commit()
+    return{
+        "message":"User registered successfully",
+        "user_id":user.id,
+        "registration_code":code
+    }
 
 @app.post("/faceimage")
 async def add_face(
