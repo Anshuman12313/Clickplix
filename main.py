@@ -8,6 +8,8 @@ from backend import send_photo
 from backend import generate_code
 from datetime import datetime, timedelta
 import numpy as np
+import os
+os.makedirs("uploads",exist_ok=True)
 app=FastAPI()
 
 Base.metadata.create_all(bind=engine)
@@ -20,66 +22,93 @@ def home():
     }
 
 @app.post("/users")
-def create_user(
+async def create_user(
     name:str,
     email:str,
+    front_face:UploadFile=File(...),
+    left_face:UploadFile=File(...),
+    right_face:UploadFile=File(...),
     db:Session=Depends(get_db)
 ):
-    user=User(
-        name=name,
-        email=email,
-    )
-
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-
-    code=generate_code()
-
-    token=RegistrationToken(
-        code=code,
-        user_id=user.id,
-        expires_at=datetime.utcnow()+timedelta(minutes=10)
-    )
-    db.add(token)
-    db.commit()
-    return{
-        "message":"User registered successfully",
-        "user_id":user.id,
-        "registration_code":code
-    }
-
-@app.post("/faceimage")
-async def add_face(
-    user_id:int,
-    file:UploadFile=File(...),
-    db:Session=Depends(get_db)
-):
-    user=db.query(User).filter(User.id==user_id).first()
-    if not user:
-        raise HTTPException(
-            status_cod=404,
-            detail="User not found"
+    try:
+        user=User(
+            name=name,
+            email=email,
         )
-    image_path=f"uploads/{file.filename}"
-    with open(image_path,"wb") as buffer:
-        buffer.write(await file.read())
+        db.add(user)
+        db.flush()
 
-    embedding=register_face(image_path)
-    face=FaceImage(
-        user_id=user_id,
-        image_path=image_path,
-        embedding=embedding.tolist()
-    )
+        images=[
+            ("front",front_face),
+            ("left",left_face),
+            ("right",right_face)
+        ]
+        for position,file in images:
+            image_path=f"uploads/{user.id}_{position}_{file.filename}"
+            with open(image_path,"wb") as buffer:
+                buffer.write(await file.read())
 
-    db.add(face)
-    db.commit()
-    db.refresh(face)
-    return{
-        "message":"Face registered",
-        "face_id":face.id,
-        "embedding_dimension":len(embedding)
-    }
+            embedding=register_face(image_path)
+            face=FaceImage(
+                user_id=user.id,
+                image_path=image_path,
+                embedding=embedding.tolist()
+            )
+            db.add(face)
+        code=generate_code()
+        token=RegistrationToken(
+            code=code,
+            user_id=user.id,
+            expires_at=datetime.utcnow()+timedelta(minutes=10)
+        )
+        db.add(token)
+        db.commit()
+        return{
+            "message":"User registered successfully",
+            "user_id":user.id,
+            "registration_code":code
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+
+
+
+
+# @app.post("/faceimage")
+# async def add_face(
+#     user_id:int,
+#     file:UploadFile=File(...),
+#     db:Session=Depends(get_db)
+# ):
+#     user=db.query(User).filter(User.id==user_id).first()
+#     if not user:
+#         raise HTTPException(
+#             status_cod=404,
+#             detail="User not found"
+#         )
+#     image_path=f"uploads/{file.filename}"
+#     with open(image_path,"wb") as buffer:
+#         buffer.write(await file.read())
+
+#     embedding=register_face(image_path)
+#     face=FaceImage(
+#         user_id=user_id,
+#         image_path=image_path,
+#         embedding=embedding.tolist()
+#     )
+
+#     db.add(face)
+#     db.commit()
+#     db.refresh(face)
+#     return{
+#         "message":"Face registered",
+#         "face_id":face.id,
+#         "embedding_dimension":len(embedding)
+#     }
 
 
 #writing endpoint to check if uploded face is in our database
@@ -92,15 +121,15 @@ async def click(
     image_path=f"uploads/{file.filename}"
     with open(image_path,"wb") as buffer:
         buffer.write(await file.read())
-    obj=find_face(db,image_path,0.5)
-    print("Object:", obj)
     
-    if obj["found"]:
-        user=db.query(User).filter(User.id==obj["user_id"]).first()
-        print("Telegram ID:", user.telegram_id)
-        send_photo(
-            user.telegram_id,
-            image_path
-        )
+    data=find_face(db,image_path,0.5)
+    for obj in data:
+        if obj["found"]:
+            user=db.query(User).filter(User.id==obj["user_id"]).first()
+            print("Telegram ID:", user.telegram_id)
+            send_photo(
+                user.telegram_id,
+                image_path
+            )
+    return data
         
-    return obj

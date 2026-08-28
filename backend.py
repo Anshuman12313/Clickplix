@@ -36,34 +36,72 @@ def register_face(image_path):
 def cosine_similarity(a,b):
     return np.dot(a,b)/(np.linalg.norm(a)*np.linalg.norm(b))
 
-def find_face(db:Session,image_path,threashold=0.5):
-    new_embedding=register_face(image_path)
-    new_embedding=np.asarray(new_embedding,dtype=np.float32)
-    faces=db.query(FaceImage).all()
-    best_similarity=-1
-    best_user_id=None
+# def find_face(db:Session,new_embedding,threashold=0.5):
+#     # new_embedding=register_face(image_path)
+#     new_embedding=np.asarray(new_embedding,dtype=np.float32)
+#     faces=db.query(FaceImage).all()
+#     best_similarity=-1
+#     best_user_id=None
+#     for face in faces:
+#         stored_embedding=np.asarray(
+#             face.embedding,
+#             dtype=np.float32
+#         )
+#         similarity=cosine_similarity(new_embedding,stored_embedding)
+#         if similarity>best_similarity:
+#             best_similarity=similarity
+#             best_user_id=face.user_id
+
+#     if(best_similarity>=threashold):
+#         return{
+#             "found":True,
+#             "user_id":best_user_id,
+#             "similarity":float(best_similarity)
+#         }
+
+#     return{
+#         "found":False,
+#         "user_id":None,
+#         "similarity":float(best_similarity)
+#     }
+
+def find_face(db:Session,image_path,threshold=0.5):
+    data=[]
+    img=cv2.imread(image_path)
+    if img is None:
+        raise ValueError("Could not read image")
+    faces=app.get(img)
+    backend_faces=db.query(FaceImage).all()
     for face in faces:
-        stored_embedding=np.asarray(
-            face.embedding,
-            dtype=np.float32
-        )
-        similarity=cosine_similarity(new_embedding,stored_embedding)
-        if similarity>best_similarity:
-            best_similarity=similarity
-            best_user_id=face.user_id
+        embeddings=face.embedding
+        embeddings=np.asarray(embeddings,dtype=np.float32)
+        best_similarity=-1
+        best_user_id=None
+        for backend_face in backend_faces:
+            stored_embeddings=np.asarray(
+                backend_face.embedding,
+                dtype=np.float32
+            )
+            similarity=cosine_similarity(stored_embeddings,embeddings)
+            if similarity>best_similarity:
+                best_similarity=similarity
+                best_user_id=backend_face.user_id
+        if best_similarity>=threshold:
+            data.append({
+                "found":True,
+                "user_id":best_user_id,
+                "similarity":float(best_similarity)
+            })
+        else:
+            data.append({
+                "found":False,
+                "user_id":None,
+                "similarity":float(best_similarity)
+            })
+    return data
 
-    if(best_similarity>=threashold):
-        return{
-            "found":True,
-            "user_id":best_user_id,
-            "similarity":float(best_similarity)
-        }
+    
 
-    return{
-        "found":False,
-        "user_id":None,
-        "similarity":float(best_similarity)
-    }
 
 def send_photo(telegram_id,image_path,caption=None):
     url=f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
