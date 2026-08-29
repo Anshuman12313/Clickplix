@@ -43,3 +43,43 @@ class RegistrationToken(Base):
     expires_at=Column(DateTime,nullable=False)
     used=Column(Boolean,default=False)
     user=relationship("User")
+
+class Group(Base):
+    __tablename__="groups"
+    id=Column(Integer,primary_key=True,index=True)
+    name=Column(String,nullable=True)
+    owner_id=Column(Integer,ForeignKey("user.id"),nullable=False)
+    owner=relationship("User")
+    members=relationship(
+        "GroupMember",
+        back_populates="group",
+        cascade="all,delete-orphan"
+    )
+
+class GroupMember(Base):
+    __tablename__="group_member"
+    id=Column(Integer,primary_key=True,index=True)
+    group_id=Column(
+        Integer,
+        ForeignKey("groups.id"),
+        nullable=False
+    )
+    # user_id=Column(
+    #     Integer,
+    #     ForeignKey("user.id"),
+    #     nullable=False
+    # )
+    user_id=Column(
+        Integer,
+        ForeignKey("user.id"),
+        nullable=False
+    )
+    group=relationship(
+        "Group",
+        back_populates="members"
+    )
+    #due to user=relationship("User")the grou
+    user=relationship("User")
+
+
+

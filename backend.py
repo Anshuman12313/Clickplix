@@ -2,7 +2,7 @@ import cv2
 from sqlalchemy.orm import Session
 from insightface.app import FaceAnalysis
 import numpy as np
-from models import User,FaceImage
+from models import User,FaceImage,GroupMember,Group
 import os
 from dotenv import load_dotenv
 import requests
@@ -65,13 +65,27 @@ def cosine_similarity(a,b):
 #         "similarity":float(best_similarity)
 #     }
 
-def find_face(db:Session,image_path,threshold=0.5):
+def find_face(db:Session,image_path,threshold=0.5,group_id=None):
     data=[]
     img=cv2.imread(image_path)
     if img is None:
         raise ValueError("Could not read image")
+    
     faces=app.get(img)
-    backend_faces=db.query(FaceImage).all()
+
+    if group_id is None:
+         backend_faces=db.query(FaceImage).all()
+    else:
+        memberships=db.query(GroupMember).filter(
+            GroupMember.group_id==group_id
+        ).all()
+        member_ids=[
+            membership.user_id for membership in memberships
+        ]
+        backend_faces=db.query(FaceImage).filter(
+            FaceImage.user_id.in_(member_ids)
+        ).all()
+    # backend_faces=db.query(FaceImage).all()
     for face in faces:
         embeddings=face.embedding
         embeddings=np.asarray(embeddings,dtype=np.float32)
