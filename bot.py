@@ -6,7 +6,7 @@ from telegram.ext import (
 )
 
 from database import SessionLocal
-from models import User, RegistrationToken
+from models import User, TelegramToken
 
 import os
 from dotenv import load_dotenv
@@ -41,9 +41,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
 
         # Find token
-        token = db.query(RegistrationToken).filter(
-            RegistrationToken.code == code,
-            RegistrationToken.used == False
+        token = db.query(TelegramToken).filter(
+            TelegramToken.code == code,
+            TelegramToken.used == False
         ).first()
 
         if not token:

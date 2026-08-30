@@ -1,9 +1,13 @@
+
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 
 function Register() {
+
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
 
     const [frontFace, setFrontFace] = useState(null);
     const [leftFace, setLeftFace] = useState(null);
@@ -11,47 +15,132 @@ function Register() {
 
     const [message, setMessage] = useState("");
 
-const handleRegister = async () => {
-    console.log("Register button clicked");
+    const navigate = useNavigate();
 
-    try {
-        const formData = new FormData();
+    const handleRegister = async () => {
 
-        formData.append("name", name);
-        formData.append("email", email);
-        formData.append("front_face", frontFace);
-        formData.append("left_face", leftFace);
-        formData.append("right_face", rightFace);
+        console.log("Register button clicked");
 
-        console.log("Sending request...");
-        console.log("API BASE URL:",import.meta.env.VITE_API_URL)
-        const response = await api.post("/users", formData);
+        // Basic validation
+        if (!name.trim()) {
+            setMessage("Please enter your name");
+            return;
+        }
 
-        console.log("REQUEST SUCCESS");
-        console.log("STATUS:", response.status);
-        console.log("DATA:", response.data);
+        if (!email.trim()) {
+            setMessage("Please enter your email");
+            return;
+        }
 
-        setMessage(
-            `Registration successful! Code: ${response.data.registration_code}`
-        );
+        if (!password) {
+            setMessage("Please enter a password");
+            return;
+        }
 
-    } 
-catch (error) {
-    console.log("========== ERROR ==========");
+        if (!frontFace || !leftFace || !rightFace) {
+            setMessage(
+                "Please upload all three face images"
+            );
+            return;
+        }
 
-    console.log("Error object:", error);
-    console.log("Error message:", error.message);
-    console.log("Response:", error.response);
-    console.log("Response status:", error.response?.status);
-    console.log("Response data:", error.response?.data);
+        try {
 
-    setMessage("Registration failed. Check console.");
-}
-};
+            const formData = new FormData();
+
+            formData.append("name", name);
+            formData.append("email", email);
+            formData.append("password", password);
+
+            formData.append(
+                "front_face",
+                frontFace
+            );
+
+            formData.append(
+                "left_face",
+                leftFace
+            );
+
+            formData.append(
+                "right_face",
+                rightFace
+            );
+
+            console.log("Sending registration request...");
+
+            const response = await api.post(
+                "/users",
+                formData
+            );
+
+            console.log(
+                "Registration response:",
+                response.data
+            );
+
+            setMessage(
+                `Registration successful! Your registration code is: ${response.data.registration_code}`
+            );
+
+            // Clear fields
+            setName("");
+            setEmail("");
+            setPassword("");
+
+            setFrontFace(null);
+            setLeftFace(null);
+            setRightFace(null);
+
+            // Optional: go to login after registration
+            setTimeout(() => {
+                navigate("/login");
+            }, 3000);
+
+        } catch (error) {
+
+            console.log("========== ERROR ==========");
+
+            console.log(
+                "Error object:",
+                error
+            );
+
+            console.log(
+                "Error message:",
+                error.message
+            );
+
+            console.log(
+                "Response:",
+                error.response
+            );
+
+            console.log(
+                "Response status:",
+                error.response?.status
+            );
+
+            console.log(
+                "Response data:",
+                error.response?.data
+            );
+
+            setMessage(
+                error.response?.data?.detail ||
+                "Registration failed"
+            );
+        }
+    };
 
     return (
         <div>
+
             <h1>Register Person</h1>
+
+            {/* =========================
+                NAME
+            ========================= */}
 
             <div>
                 <label>Name</label>
@@ -61,11 +150,17 @@ catch (error) {
                     type="text"
                     placeholder="Enter your name"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) =>
+                        setName(e.target.value)
+                    }
                 />
             </div>
 
             <br />
+
+            {/* =========================
+                EMAIL
+            ========================= */}
 
             <div>
                 <label>Email</label>
@@ -75,11 +170,37 @@ catch (error) {
                     type="email"
                     placeholder="Enter your email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) =>
+                        setEmail(e.target.value)
+                    }
                 />
             </div>
 
             <br />
+
+            {/* =========================
+                PASSWORD
+            ========================= */}
+
+            <div>
+                <label>Password</label>
+                <br />
+
+                <input
+                    type="password"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) =>
+                        setPassword(e.target.value)
+                    }
+                />
+            </div>
+
+            <br />
+
+            {/* =========================
+                FRONT FACE
+            ========================= */}
 
             <div>
                 <label>Front Face</label>
@@ -88,11 +209,19 @@ catch (error) {
                 <input
                     type="file"
                     accept="image/*"
-                    onChange={(e) => setFrontFace(e.target.files[0])}
+                    onChange={(e) =>
+                        setFrontFace(
+                            e.target.files[0]
+                        )
+                    }
                 />
             </div>
 
             <br />
+
+            {/* =========================
+                LEFT FACE
+            ========================= */}
 
             <div>
                 <label>Left Face</label>
@@ -101,11 +230,19 @@ catch (error) {
                 <input
                     type="file"
                     accept="image/*"
-                    onChange={(e) => setLeftFace(e.target.files[0])}
+                    onChange={(e) =>
+                        setLeftFace(
+                            e.target.files[0]
+                        )
+                    }
                 />
             </div>
 
             <br />
+
+            {/* =========================
+                RIGHT FACE
+            ========================= */}
 
             <div>
                 <label>Right Face</label>
@@ -114,7 +251,11 @@ catch (error) {
                 <input
                     type="file"
                     accept="image/*"
-                    onChange={(e) => setRightFace(e.target.files[0])}
+                    onChange={(e) =>
+                        setRightFace(
+                            e.target.files[0]
+                        )
+                    }
                 />
             </div>
 
@@ -125,6 +266,7 @@ catch (error) {
             </button>
 
             <p>{message}</p>
+
         </div>
     );
 }

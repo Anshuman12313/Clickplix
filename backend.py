@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 import requests
 import secrets
 import string
+from passlib.context import CryptContext
+
 load_dotenv()
 BOT_TOKEN=os.getenv("TELEGRAM_BOT_TOKEN")
 app=FaceAnalysis(
@@ -144,6 +146,10 @@ def generate_code(length=6):
         secrets.choice(character)
         for _ in range(length)
     )
+
+
+#working on password thing
+
 
 
 

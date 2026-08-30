@@ -6,6 +6,7 @@ import Dashboard from "./pages/Dashboard";
 import CreateGroup from "./pages/CreateGroup"; 
 import Group from "./pages/Group";
 import Camera from "./pages/Camera"
+import Login from "./pages/Login"
 function App(){
     return(
         <BrowserRouter>
@@ -34,6 +35,10 @@ function App(){
                 <Route
                 path="/camera/:groupId"
                 element={<Camera/>}
+                />
+                <Route
+                path="/Login"
+                element={<Login/>}
                 />
         </Routes>
 

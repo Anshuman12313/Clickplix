@@ -9,10 +9,6 @@ function CreateGroup() {
 
     const navigate = useNavigate();
 
-    // Temporary user ID
-    // Later this will come from authentication
-    const ownerId = 8;
-
     const handleCreateGroup = async () => {
         if (!groupName.trim()) {
             setMessage("Please enter a group name");
@@ -23,7 +19,6 @@ function CreateGroup() {
             const formData = new FormData();
 
             formData.append("name", groupName);
-            formData.append("owner_id", ownerId);
 
             const response = await api.post(
                 "/groups",
@@ -34,7 +29,6 @@ function CreateGroup() {
 
             setMessage("Group created successfully!");
 
-            // Go back to dashboard
             setTimeout(() => {
                 navigate("/dashboard");
             }, 1000);
@@ -61,7 +55,9 @@ function CreateGroup() {
                 type="text"
                 placeholder="Enter group name"
                 value={groupName}
-                onChange={(e) => setGroupName(e.target.value)}
+                onChange={(e) =>
+                    setGroupName(e.target.value)
+                }
             />
 
             <br />
@@ -77,3 +73,4 @@ function CreateGroup() {
 }
 
 export default CreateGroup;
+

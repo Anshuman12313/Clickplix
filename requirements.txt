@@ -11,3 +11,7 @@ uvicorn
 pgvector
 python-telegram-bot
 requests
+fastapi_login
+pyjwt
+pwdlib
+jwt

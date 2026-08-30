@@ -11,6 +11,10 @@ class User(Base):
     id=Column(Integer,primary_key=True)
     name=Column(String)
     email=Column(VARCHAR(100),unique=True)
+    password_hash=Column(
+        String,
+        nullable=True
+    )
     telegram_id=Column(BigInteger,unique=True,nullable=True)
     photos=relationship("FaceImage",back_populates="user")
 
@@ -28,19 +32,20 @@ class FaceImage(Base):
 
     user=relationship("User",back_populates="photos")
 
-class RegistrationToken(Base):
-    __tablename__="registration_token"
+class TelegramToken(Base):
+    __tablename__="telegram_tokens"
     id=Column(Integer,primary_key=True,autoincrement=True)
     code=Column(String,unique=True,autoincrement=True)
     user_id=Column(
         Integer,
         ForeignKey("user.id"),
-        nullable=False
+        nullable=False,
+        unique=True
     )
     #actually it checks if user.id availiable or not if available then onely allowed
     #else didnot allow as suppose you insert user_id=4 then in table User someone with id
     # 4 should must be exist
-    expires_at=Column(DateTime,nullable=False)
+   # expires_at=Column(DateTime,nullable=False)
     used=Column(Boolean,default=False)
     user=relationship("User")
 

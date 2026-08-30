@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from database import engine,get_db,Base
-from models import User,FaceImage,RegistrationToken,Group,GroupMember
+from models import User,FaceImage,TelegramToken,Group,GroupMember
 from fastapi import FastAPI,Depends,UploadFile,File,HTTPException
 from backend import register_face
 from backend import find_face
@@ -11,12 +11,22 @@ import numpy as np
 import os
 from fastapi import Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordRequestForm
+from auth import(
+    verify_password,
+    create_access_token,
+    get_current_user,
+    hash_password
+)
 os.makedirs("uploads",exist_ok=True)
 app=FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -34,15 +44,25 @@ def home():
 async def create_user(
     name:str=Form(...),
     email:str=Form(...),
+    password:str=Form(...),
     front_face:UploadFile=File(...),
     left_face:UploadFile=File(...),
     right_face:UploadFile=File(...),
     db:Session=Depends(get_db)
 ):
     try:
+        existing_user=db.query(User).filter(
+            User.email==email
+        ).first()
+        if existing_user:
+            raise HTTPException(
+                status_code=400,
+                detail="Email already registered"
+            )
         user=User(
             name=name,
             email=email,
+            password_hash=hash_password(password)
         )
         db.add(user)
         db.flush()
@@ -65,10 +85,10 @@ async def create_user(
             )
             db.add(face)
         code=generate_code()
-        token=RegistrationToken(
+        token=TelegramToken(
             code=code,
             user_id=user.id,
-            expires_at=datetime.utcnow()+timedelta(minutes=10)
+           # expires_at=None
         )
         db.add(token)
         db.commit()
@@ -159,27 +179,27 @@ async def click(
 @app.post("/groups")
 async def create_group(
     name:str=Form(...),
-    owner_id:int=Form(...),
+    current_user:User=Depends(get_current_user),
     db:Session=Depends(get_db)
 ):
-    user=db.query(User).filter(User.id==owner_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="user not found"
-        )
+    # user=db.query(User).filter(User.id==owner_id).first()
+    # if not user:
+    #     raise HTTPException(
+    #         status_code=404,
+    #         detail="user not found"
+    #     )
 
     #creating the group
 
     group=Group(
         name=name,
-        owner_id=owner_id
+        owner_id=current_user.id
     )
     db.add(group)
     db.flush()
     member=GroupMember(
         group_id=group.id,
-        user_id=owner_id
+        user_id=current_user.id
     )
     db.add(member)
     db.commit()
@@ -203,8 +223,8 @@ async def add_member(
             status_code=404,
             detail="Group not found"
         )
-    token=db.query(RegistrationToken).filter(
-        RegistrationToken.code==registration_code
+    token=db.query(TelegramToken).filter(
+        TelegramToken.code==registration_code
     ).first()
 
     if not token:
@@ -290,14 +310,14 @@ async def get_group(
     }
 
 
-@app.get("/users/{user_id}/groups")
+@app.get("/groups")
 async def get_user_groups(
-    user_id: int,
+    current_user:User=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     # Check if user exists
     user = db.query(User).filter(
-        User.id == user_id
+        User.id == current_user.id
     ).first()
 
     if not user:
@@ -308,7 +328,7 @@ async def get_user_groups(
 
     # Find groups where the user is a member
     memberships = db.query(GroupMember).filter(
-        GroupMember.user_id == user_id
+        GroupMember.user_id == current_user.id
     ).all()
 
     groups = []
@@ -335,9 +355,71 @@ async def get_user_groups(
         })
 
     return {
-        "user_id": user_id,
+        "user_id": current_user.id,
         "groups": groups
     }
 
+@app.post("/login")
+async def login(
+    form_data:OAuth2PasswordRequestForm=Depends(),
+    db:Session=Depends(get_db)
+):
+    user=db.query(User).filter(
+        User.email==form_data.username
+    ).first()
+
+    if user is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect email or password"
+        )
+    if user.password_hash is None:
+        raise HTTPException(
+        status_code=401, 
+        detail="Incorrect email or password"
+        )
+
+    if not verify_password(
+        form_data.password,
+        user.password_hash
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="This account does not have a password yet"
+        )
+    access_token=create_access_token(user.id)
+    return{
+        "access_token":access_token,
+        "token_type":"bearer",
+        "user":{
+            "id":user.id,
+            "name":user.name,
+            "email":user.email
+        }
+    }
+
+#details about the user 
+@app.get("/me")
+async def get_me(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    registration_token = db.query(TelegramToken).filter(
+        TelegramToken.user_id == current_user.id
+    ).order_by(
+        TelegramToken.id.desc()
+    ).first()
+
+    return {
+        "id": current_user.id,
+        "name": current_user.name,
+        "email": current_user.email,
+        "registration_code": (
+            registration_token.code
+            if registration_token
+            else None
+        )
+        
+    }
 
 
