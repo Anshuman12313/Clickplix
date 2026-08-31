@@ -1,5 +1,5 @@
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import api from "../services/api";
 
@@ -15,34 +15,93 @@ function Camera() {
     const [matches, setMatches] = useState([]);
     const [processing, setProcessing] = useState(false);
 
-    // =========================
-    // START CAMERA
-    // =========================
+    // environment = rear camera
+    // user = front camera
+    const [facingMode, setFacingMode] = useState("environment");
 
-    const startCamera = async () => {
+    // =========================================================
+    // START CAMERA
+    // =========================================================
+
+    const startCamera = async (mode = facingMode) => {
         try {
+            setMessage("");
+
+            // Stop previous stream first
+            if (stream) {
+                stream.getTracks().forEach((track) => track.stop());
+            }
+
+            /*
+             * Prefer the requested camera.
+             *
+             * "environment" = rear camera
+             * "user"        = front camera
+             *
+             * ideal allows the browser to fall back if the
+             * requested camera is not available.
+             */
             const mediaStream =
                 await navigator.mediaDevices.getUserMedia({
-                    video: true
+                    video: {
+                        facingMode: {
+                            ideal: mode
+                        }
+                    },
+                    audio: false
                 });
 
-            videoRef.current.srcObject = mediaStream;
+            if (videoRef.current) {
+                videoRef.current.srcObject = mediaStream;
+
+                // Make sure the video actually starts
+                await videoRef.current.play().catch(() => {});
+            }
 
             setStream(mediaStream);
-            setMessage("");
 
         } catch (error) {
             console.error("Camera error:", error);
 
-            setMessage(
-                "Could not access camera. Please allow camera permission."
-            );
+            /*
+             * Some browsers/devices may not support facingMode
+             * properly. Try the default camera as a fallback.
+             */
+            try {
+                const fallbackStream =
+                    await navigator.mediaDevices.getUserMedia({
+                        video: true,
+                        audio: false
+                    });
+
+                if (videoRef.current) {
+                    videoRef.current.srcObject =
+                        fallbackStream;
+
+                    await videoRef.current
+                        .play()
+                        .catch(() => {});
+                }
+
+                setStream(fallbackStream);
+                setMessage("");
+
+            } catch (fallbackError) {
+                console.error(
+                    "Fallback camera error:",
+                    fallbackError
+                );
+
+                setMessage(
+                    "Could not access camera. Please allow camera permission."
+                );
+            }
         }
     };
 
-    // =========================
+    // =========================================================
     // STOP CAMERA
-    // =========================
+    // =========================================================
 
     const stopCamera = () => {
         if (stream) {
@@ -58,9 +117,24 @@ function Camera() {
         }
     };
 
-    // =========================
+    // =========================================================
+    // SWITCH CAMERA
+    // =========================================================
+
+    const switchCamera = async () => {
+        const newMode =
+            facingMode === "environment"
+                ? "user"
+                : "environment";
+
+        setFacingMode(newMode);
+
+        await startCamera(newMode);
+    };
+
+    // =========================================================
     // TAKE PHOTO
-    // =========================
+    // =========================================================
 
     const takePhoto = () => {
         const video = videoRef.current;
@@ -83,11 +157,25 @@ function Camera() {
             return;
         }
 
+        /*
+         * IMPORTANT:
+         *
+         * We intentionally DO NOT mirror the canvas.
+         *
+         * CSS mirroring only affects the preview.
+         * The actual camera frame is copied normally.
+         *
+         * This prevents the saved photo from being
+         * horizontally reversed.
+         */
+
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
 
         const context =
             canvas.getContext("2d");
+
+        context.save();
 
         context.drawImage(
             video,
@@ -96,6 +184,8 @@ function Camera() {
             canvas.width,
             canvas.height
         );
+
+        context.restore();
 
         canvas.toBlob(
             (blob) => {
@@ -110,14 +200,29 @@ function Camera() {
                 setMatches([]);
                 setMessage("");
 
+                // Stop camera after taking photo
+                if (stream) {
+                    stream
+                        .getTracks()
+                        .forEach(
+                            (track) => track.stop()
+                        );
+
+                    setStream(null);
+                }
+
+                if (videoRef.current) {
+                    videoRef.current.srcObject = null;
+                }
             },
-            "image/jpeg"
+            "image/jpeg",
+            0.92
         );
     };
 
-    // =========================
+    // =========================================================
     // SEND PHOTO
-    // =========================
+    // =========================================================
 
     const sendPhoto = async () => {
         if (!photo) {
@@ -194,15 +299,31 @@ function Camera() {
         }
     };
 
-    // =========================
+    // =========================================================
     // RETAKE
-    // =========================
+    // =========================================================
 
     const retakePhoto = () => {
         setPhoto(null);
         setMatches([]);
         setMessage("");
     };
+
+    // =========================================================
+    // CLEANUP CAMERA WHEN COMPONENT UNMOUNTS
+    // =========================================================
+
+    useEffect(() => {
+        return () => {
+            if (videoRef.current?.srcObject) {
+                videoRef.current.srcObject
+                    .getTracks()
+                    .forEach(
+                        (track) => track.stop()
+                    );
+            }
+        };
+    }, []);
 
     const isSuccess =
         matches.length > 0 &&
@@ -215,7 +336,9 @@ function Camera() {
     return (
         <div className="camera-page">
 
-            {/* NAVBAR */}
+            {/* =================================================
+                NAVBAR
+            ================================================= */}
 
             <header className="camera-nav">
 
@@ -245,7 +368,9 @@ function Camera() {
             </header>
 
 
-            {/* MAIN */}
+            {/* =================================================
+                MAIN
+            ================================================= */}
 
             <main className="camera-container">
 
@@ -274,7 +399,9 @@ function Camera() {
                 </div>
 
 
-                {/* CAMERA AREA */}
+                {/* =================================================
+                    CAMERA CARD
+                ================================================= */}
 
                 <section className="camera-card">
 
@@ -290,6 +417,12 @@ function Camera() {
                                     ref={videoRef}
                                     autoPlay
                                     playsInline
+                                    muted
+                                    className={
+                                        facingMode === "user"
+                                            ? "front-camera"
+                                            : "rear-camera"
+                                    }
                                 />
 
                                 {!stream && (
@@ -318,13 +451,27 @@ function Camera() {
                                     <div className="camera-overlay">
 
                                         <div className="corner top-left"></div>
+
                                         <div className="corner top-right"></div>
+
                                         <div className="corner bottom-left"></div>
+
                                         <div className="corner bottom-right"></div>
 
                                         <div className="live-indicator">
+
                                             <span></span>
+
                                             LIVE
+
+                                        </div>
+
+                                        <div className="camera-mode">
+
+                                            {facingMode === "environment"
+                                                ? "REAR CAMERA"
+                                                : "FRONT CAMERA"}
+
                                         </div>
 
                                     </div>
@@ -346,15 +493,31 @@ function Camera() {
                                     ▶ Start Camera
                                 </button>
 
+
                                 <button
                                     className="capture-button"
                                     onClick={takePhoto}
                                     disabled={!stream}
+                                    aria-label="Take photo"
                                 >
+
                                     <span className="capture-ring">
+
                                         <span></span>
+
                                     </span>
+
                                 </button>
+
+
+                                <button
+                                    className="control-button secondary"
+                                    onClick={switchCamera}
+                                    disabled={!stream}
+                                >
+                                    🔄 Switch Camera
+                                </button>
+
 
                                 <button
                                     className="control-button secondary"
@@ -405,16 +568,22 @@ function Camera() {
                                     onClick={sendPhoto}
                                     disabled={processing}
                                 >
+
                                     {processing ? (
+
                                         <>
                                             <span className="small-loader"></span>
                                             Finding people...
                                         </>
+
                                     ) : (
+
                                         <>
                                             ✦ Find People
                                         </>
+
                                     )}
+
                                 </button>
 
                             </div>
@@ -422,6 +591,7 @@ function Camera() {
                         </>
 
                     )}
+
 
                     <canvas
                         ref={canvasRef}
@@ -433,16 +603,20 @@ function Camera() {
                 </section>
 
 
-                {/* PROCESSING */}
+                {/* =================================================
+                    PROCESSING
+                ================================================= */}
 
                 {processing && (
 
                     <section className="processing-card">
 
                         <div className="processing-animation">
+
                             <div></div>
                             <div></div>
                             <div></div>
+
                         </div>
 
                         <div>
@@ -463,7 +637,9 @@ function Camera() {
                 )}
 
 
-                {/* SUCCESS */}
+                {/* =================================================
+                    SUCCESS
+                ================================================= */}
 
                 {isSuccess && (
 
@@ -525,11 +701,13 @@ function Camera() {
                                         <div className="match-details">
 
                                             <div className="similarity">
+
                                                 {(
                                                     person.similarity *
                                                     100
                                                 ).toFixed(1)}
                                                 %
+
                                             </div>
 
                                             <div className="sent">
@@ -573,9 +751,12 @@ function Camera() {
                 )}
 
 
-                {/* NO MATCH */}
+                {/* =================================================
+                    NO MATCH
+                ================================================= */}
 
-                {isNoMatch && !processing && (
+                {isNoMatch &&
+                    !processing && (
 
                     <section className="no-match-card">
 
@@ -612,7 +793,9 @@ function Camera() {
                 )}
 
 
-                {/* ERROR */}
+                {/* =================================================
+                    ERROR
+                ================================================= */}
 
                 {message &&
                     !processing &&
@@ -621,7 +804,9 @@ function Camera() {
 
                     <div className="error-message">
 
-                        <span>!</span>
+                        <span>
+                            !
+                        </span>
 
                         {message}
 
@@ -632,7 +817,9 @@ function Camera() {
             </main>
 
 
-            {/* STYLES */}
+            {/* =================================================
+                STYLES
+            ================================================= */}
 
             <style>{`
 
@@ -659,7 +846,10 @@ function Camera() {
                     background: #f7f7fb;
                 }
 
-                /* NAV */
+
+                /* =========================
+                   NAVBAR
+                ========================= */
 
                 .camera-nav {
                     height: 72px;
@@ -680,7 +870,8 @@ function Camera() {
                     border-bottom:
                         1px solid #e8e8ed;
 
-                    backdrop-filter: blur(10px);
+                    backdrop-filter:
+                        blur(10px);
                 }
 
                 .brand {
@@ -725,7 +916,10 @@ function Camera() {
                     color: #9999a1;
                 }
 
-                /* MAIN */
+
+                /* =========================
+                   MAIN
+                ========================= */
 
                 .camera-container {
                     width: 100%;
@@ -770,7 +964,10 @@ function Camera() {
                     max-width: 570px;
                 }
 
-                /* CAMERA CARD */
+
+                /* =========================
+                   CAMERA CARD
+                ========================= */
 
                 .camera-card {
                     overflow: hidden;
@@ -781,14 +978,18 @@ function Camera() {
 
                     box-shadow:
                         0 18px 55px
-                        rgba(15,15,20,0.12);
+                        rgba(
+                            15,
+                            15,
+                            20,
+                            0.12
+                        );
                 }
 
                 .video-wrapper {
                     position: relative;
 
                     width: 100%;
-
                     height: 540px;
 
                     background: #08080b;
@@ -805,7 +1006,25 @@ function Camera() {
                     display: block;
                 }
 
-                /* PLACEHOLDER */
+                /*
+                 * FRONT CAMERA
+                 *
+                 * Mirror only the LIVE preview.
+                 * This does NOT affect the captured canvas image.
+                 */
+
+                .video-wrapper video.front-camera {
+                    transform: scaleX(-1);
+                }
+
+                .video-wrapper video.rear-camera {
+                    transform: none;
+                }
+
+
+                /* =========================
+                   PLACEHOLDER
+                ========================= */
 
                 .camera-placeholder {
                     position: absolute;
@@ -854,10 +1073,14 @@ function Camera() {
                     font-size: 12px;
                 }
 
-                /* CAMERA OVERLAY */
+
+                /* =========================
+                   CAMERA OVERLAY
+                ========================= */
 
                 .camera-overlay {
                     position: absolute;
+
                     inset: 0;
 
                     pointer-events: none;
@@ -869,12 +1092,14 @@ function Camera() {
                     width: 35px;
                     height: 35px;
 
-                    border-color: rgba(
-                        255,
-                        255,
-                        255,
-                        0.8
-                    );
+                    border-color:
+                        rgba(
+                            255,
+                            255,
+                            255,
+                            0.8
+                        );
+
                     border-style: solid;
                 }
 
@@ -882,28 +1107,32 @@ function Camera() {
                     top: 25px;
                     left: 25px;
 
-                    border-width: 2px 0 0 2px;
+                    border-width:
+                        2px 0 0 2px;
                 }
 
                 .top-right {
                     top: 25px;
                     right: 25px;
 
-                    border-width: 2px 2px 0 0;
+                    border-width:
+                        2px 2px 0 0;
                 }
 
                 .bottom-left {
                     bottom: 25px;
                     left: 25px;
 
-                    border-width: 0 0 2px 2px;
+                    border-width:
+                        0 0 2px 2px;
                 }
 
                 .bottom-right {
                     bottom: 25px;
                     right: 25px;
 
-                    border-width: 0 2px 2px 0;
+                    border-width:
+                        0 2px 2px 0;
                 }
 
                 .live-indicator {
@@ -917,23 +1146,27 @@ function Camera() {
 
                     display: flex;
                     align-items: center;
+
                     gap: 6px;
 
-                    padding: 6px 10px;
+                    padding:
+                        6px 10px;
 
                     border-radius: 20px;
 
-                    background: rgba(
-                        0,
-                        0,
-                        0,
-                        0.5
-                    );
+                    background:
+                        rgba(
+                            0,
+                            0,
+                            0,
+                            0.5
+                        );
 
                     color: white;
 
                     font-size: 9px;
                     font-weight: 700;
+
                     letter-spacing: 1px;
                 }
 
@@ -946,36 +1179,78 @@ function Camera() {
                     background: #ff5757;
                 }
 
-                /* CAMERA CONTROLS */
+                .camera-mode {
+                    position: absolute;
+
+                    bottom: 18px;
+                    left: 50%;
+
+                    transform:
+                        translateX(-50%);
+
+                    padding:
+                        6px 10px;
+
+                    border-radius: 20px;
+
+                    background:
+                        rgba(
+                            0,
+                            0,
+                            0,
+                            0.55
+                        );
+
+                    color: white;
+
+                    font-size: 8px;
+                    font-weight: 700;
+
+                    letter-spacing: 1px;
+
+                    white-space: nowrap;
+                }
+
+
+                /* =========================
+                   CAMERA CONTROLS
+                ========================= */
 
                 .camera-controls {
-                    height: 105px;
+                    min-height: 105px;
+
+                    padding: 15px 20px;
 
                     display: flex;
+
                     align-items: center;
                     justify-content: center;
 
-                    gap: 55px;
+                    gap: 18px;
 
                     background: #111116;
                 }
 
                 .control-button {
-                    border: 1px solid #303038;
+                    border:
+                        1px solid #303038;
 
                     background: #1c1c23;
 
                     color: #aaaab2;
 
-                    height: 38px;
+                    min-height: 38px;
 
-                    padding: 0 14px;
+                    padding:
+                        0 14px;
 
                     border-radius: 8px;
 
                     font-size: 11px;
 
                     cursor: pointer;
+
+                    white-space: nowrap;
                 }
 
                 .control-button:hover:not(:disabled) {
@@ -992,13 +1267,17 @@ function Camera() {
                     width: 64px;
                     height: 64px;
 
+                    flex-shrink: 0;
+
                     border-radius: 50%;
 
-                    border: 3px solid white;
+                    border:
+                        3px solid white;
 
                     background: transparent;
 
                     display: flex;
+
                     align-items: center;
                     justify-content: center;
 
@@ -1019,6 +1298,7 @@ function Camera() {
                     background: white;
 
                     display: flex;
+
                     align-items: center;
                     justify-content: center;
                 }
@@ -1032,7 +1312,10 @@ function Camera() {
                     background: white;
                 }
 
-                /* PHOTO PREVIEW */
+
+                /* =========================
+                   PHOTO PREVIEW
+                ========================= */
 
                 .photo-wrapper {
                     position: relative;
@@ -1058,16 +1341,18 @@ function Camera() {
                     top: 18px;
                     right: 18px;
 
-                    padding: 8px 11px;
+                    padding:
+                        8px 11px;
 
                     border-radius: 20px;
 
-                    background: rgba(
-                        20,
-                        20,
-                        25,
-                        0.75
-                    );
+                    background:
+                        rgba(
+                            20,
+                            20,
+                            25,
+                            0.75
+                        );
 
                     color: white;
 
@@ -1076,11 +1361,13 @@ function Camera() {
                 }
 
                 .preview-actions {
-                    height: 100px;
+                    min-height: 100px;
 
-                    padding: 0 25px;
+                    padding:
+                        0 25px;
 
                     display: flex;
+
                     align-items: center;
                     justify-content: center;
 
@@ -1093,7 +1380,8 @@ function Camera() {
 
                     border-radius: 8px;
 
-                    padding: 0 20px;
+                    padding:
+                        0 20px;
 
                     font-size: 12px;
                     font-weight: 600;
@@ -1103,14 +1391,20 @@ function Camera() {
 
                 .retake-button {
                     background: #202027;
-                    border: 1px solid #33333b;
+
+                    border:
+                        1px solid #33333b;
+
                     color: #b0b0b7;
                 }
 
                 .find-button {
                     background: white;
+
                     color: #111116;
+
                     border: none;
+
                     min-width: 150px;
                 }
 
@@ -1126,8 +1420,11 @@ function Camera() {
                     width: 12px;
                     height: 12px;
 
-                    border: 2px solid #cfcfd4;
-                    border-top-color: #111116;
+                    border:
+                        2px solid #cfcfd4;
+
+                    border-top-color:
+                        #111116;
 
                     border-radius: 50%;
 
@@ -1141,11 +1438,15 @@ function Camera() {
 
                 @keyframes spin {
                     to {
-                        transform: rotate(360deg);
+                        transform:
+                            rotate(360deg);
                     }
                 }
 
-                /* PROCESSING */
+
+                /* =========================
+                   PROCESSING
+                ========================= */
 
                 .processing-card {
                     margin-top: 18px;
@@ -1154,11 +1455,13 @@ function Camera() {
 
                     background: white;
 
-                    border: 1px solid #e6e6eb;
+                    border:
+                        1px solid #e6e6eb;
 
                     border-radius: 14px;
 
                     display: flex;
+
                     align-items: center;
 
                     gap: 15px;
@@ -1173,6 +1476,7 @@ function Camera() {
                     background: #f0ebff;
 
                     display: flex;
+
                     align-items: center;
                     justify-content: center;
 
@@ -1193,20 +1497,24 @@ function Camera() {
                 }
 
                 .processing-animation div:nth-child(2) {
-                    animation-delay: 0.2s;
+                    animation-delay:
+                        0.2s;
                 }
 
                 .processing-animation div:nth-child(3) {
-                    animation-delay: 0.4s;
+                    animation-delay:
+                        0.4s;
                 }
 
                 @keyframes pulse {
                     from {
-                        transform: scaleY(0.5);
+                        transform:
+                            scaleY(0.5);
                     }
 
                     to {
-                        transform: scaleY(1.2);
+                        transform:
+                            scaleY(1.2);
                     }
                 }
 
@@ -1222,7 +1530,10 @@ function Camera() {
                     font-size: 11px;
                 }
 
-                /* RESULTS */
+
+                /* =========================
+                   RESULTS
+                ========================= */
 
                 .results-section {
                     margin-top: 25px;
@@ -1230,6 +1541,7 @@ function Camera() {
 
                 .results-header {
                     display: flex;
+
                     align-items: center;
                     justify-content: space-between;
 
@@ -1240,6 +1552,7 @@ function Camera() {
                     margin: 0;
 
                     font-size: 22px;
+
                     letter-spacing: -0.5px;
                 }
 
@@ -1250,9 +1563,11 @@ function Camera() {
                     border-radius: 9px;
 
                     background: #111116;
+
                     color: white;
 
                     display: flex;
+
                     align-items: center;
                     justify-content: center;
 
@@ -1262,6 +1577,7 @@ function Camera() {
 
                 .matches-grid {
                     display: flex;
+
                     flex-direction: column;
 
                     gap: 9px;
@@ -1270,13 +1586,15 @@ function Camera() {
                 .match-card {
                     background: white;
 
-                    border: 1px solid #e6e6eb;
+                    border:
+                        1px solid #e6e6eb;
 
                     border-radius: 12px;
 
                     padding: 14px;
 
                     display: flex;
+
                     align-items: center;
                 }
 
@@ -1289,6 +1607,7 @@ function Camera() {
                     background: #eeeeF2;
 
                     display: flex;
+
                     align-items: center;
                     justify-content: center;
 
@@ -1300,6 +1619,7 @@ function Camera() {
 
                 .match-info {
                     display: flex;
+
                     flex-direction: column;
 
                     gap: 3px;
@@ -1311,6 +1631,7 @@ function Camera() {
 
                 .match-info span {
                     font-size: 10px;
+
                     color: #92929a;
                 }
 
@@ -1318,6 +1639,7 @@ function Camera() {
                     margin-left: auto;
 
                     display: flex;
+
                     align-items: center;
 
                     gap: 18px;
@@ -1325,11 +1647,13 @@ function Camera() {
 
                 .similarity {
                     font-size: 12px;
+
                     font-weight: 700;
                 }
 
                 .sent {
-                    padding: 6px 9px;
+                    padding:
+                        6px 9px;
 
                     border-radius: 6px;
 
@@ -1338,10 +1662,14 @@ function Camera() {
                     color: #348358;
 
                     font-size: 10px;
+
                     font-weight: 700;
                 }
 
-                /* SUCCESS */
+
+                /* =========================
+                   SUCCESS
+                ========================= */
 
                 .success-banner {
                     margin-top: 12px;
@@ -1349,13 +1677,15 @@ function Camera() {
                     padding: 15px;
 
                     display: flex;
+
                     gap: 12px;
 
                     border-radius: 11px;
 
                     background: #ecf8f0;
 
-                    border: 1px solid #d5eedf;
+                    border:
+                        1px solid #d5eedf;
                 }
 
                 .success-banner > span {
@@ -1365,9 +1695,11 @@ function Camera() {
                     border-radius: 50%;
 
                     background: #348358;
+
                     color: white;
 
                     display: flex;
+
                     align-items: center;
                     justify-content: center;
 
@@ -1376,6 +1708,7 @@ function Camera() {
 
                 .success-banner strong {
                     font-size: 12px;
+
                     color: #287347;
                 }
 
@@ -1387,7 +1720,10 @@ function Camera() {
                     font-size: 10px;
                 }
 
-                /* NO MATCH */
+
+                /* =========================
+                   NO MATCH
+                ========================= */
 
                 .no-match-card {
                     margin-top: 25px;
@@ -1396,11 +1732,13 @@ function Camera() {
 
                     background: white;
 
-                    border: 1px solid #e6e6eb;
+                    border:
+                        1px solid #e6e6eb;
 
                     border-radius: 15px;
 
                     display: flex;
+
                     align-items: center;
 
                     gap: 15px;
@@ -1417,10 +1755,12 @@ function Camera() {
                     background: #f1f1f4;
 
                     display: flex;
+
                     align-items: center;
                     justify-content: center;
 
                     font-size: 20px;
+
                     font-weight: 700;
                 }
 
@@ -1444,37 +1784,47 @@ function Camera() {
                     border: none;
 
                     background: #111116;
+
                     color: white;
 
-                    padding: 10px 14px;
+                    padding:
+                        10px 14px;
 
                     border-radius: 8px;
 
                     font-size: 11px;
+
                     font-weight: 600;
 
                     cursor: pointer;
                 }
 
-                /* ERROR */
+
+                /* =========================
+                   ERROR
+                ========================= */
 
                 .error-message {
                     margin-top: 18px;
 
-                    padding: 13px 15px;
+                    padding:
+                        13px 15px;
 
                     border-radius: 9px;
 
                     background: #fff0f0;
 
-                    border: 1px solid #ffdada;
+                    border:
+                        1px solid #ffdada;
 
                     color: #b63d3d;
 
                     font-size: 12px;
 
                     display: flex;
+
                     align-items: center;
+
                     gap: 9px;
                 }
 
@@ -1485,16 +1835,21 @@ function Camera() {
                     border-radius: 50%;
 
                     background: #b63d3d;
+
                     color: white;
 
                     display: flex;
+
                     align-items: center;
                     justify-content: center;
 
                     font-weight: 700;
                 }
 
-                /* MOBILE */
+
+                /* =========================
+                   MOBILE
+                ========================= */
 
                 @media (max-width: 700px) {
 
@@ -1521,15 +1876,59 @@ function Camera() {
                     }
 
                     .camera-controls {
-                        gap: 20px;
+                        min-height: auto;
+
+                        padding:
+                            18px 12px;
+
+                        display: grid;
+
+                        grid-template-columns:
+                            1fr 64px 1fr;
+
+                        gap: 12px;
                     }
 
+                    .camera-controls
                     .control-button {
-                        padding: 0 10px;
+                        width: 100%;
+
+                        padding:
+                            0 8px;
+
+                        font-size: 10px;
+                    }
+
+                    /*
+                     * Put switch camera underneath
+                     * on small screens.
+                     */
+
+                    .camera-controls
+                    .control-button:nth-of-type(2) {
+                        grid-column:
+                            1 / 2;
+                    }
+
+                    .camera-controls
+                    .control-button:nth-of-type(3) {
+                        grid-column:
+                            3 / 4;
+                    }
+
+                    .camera-controls
+                    .capture-button {
+                        grid-column:
+                            2 / 3;
+
+                        grid-row:
+                            1 / 2;
                     }
 
                     .no-match-card {
-                        align-items: flex-start;
+                        align-items:
+                            flex-start;
+
                         flex-wrap: wrap;
                     }
 
@@ -1539,6 +1938,63 @@ function Camera() {
 
                     .match-details {
                         gap: 8px;
+                    }
+
+                }
+
+
+                /* =========================
+                   VERY SMALL PHONES
+                ========================= */
+
+                @media (max-width: 420px) {
+
+                    .camera-nav {
+                        height: 62px;
+                    }
+
+                    .brand {
+                        font-size: 15px;
+                    }
+
+                    .brand-icon {
+                        width: 28px;
+                        height: 28px;
+                    }
+
+                    .back-link {
+                        font-size: 11px;
+                    }
+
+                    .video-wrapper,
+                    .photo-wrapper {
+                        height: 380px;
+                    }
+
+                    .camera-controls {
+                        grid-template-columns:
+                            1fr 58px 1fr;
+
+                        gap: 8px;
+                    }
+
+                    .capture-button {
+                        width: 58px;
+                        height: 58px;
+                    }
+
+                    .capture-ring {
+                        width: 44px;
+                        height: 44px;
+                    }
+
+                    .capture-ring span {
+                        width: 37px;
+                        height: 37px;
+                    }
+
+                    .control-button {
+                        font-size: 9px;
                     }
 
                 }
