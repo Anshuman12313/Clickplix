@@ -10,8 +10,11 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import User
+from dotenv import load_dotenv
+import os
+load_dotenv()
 
-SECRETKEY = "asdjfasjddlfjadlddkjfd1234567890"
+SECRETKEY =os.getenv("SECRET_KEY")
 ALGORITHM="HS256"
 
 ACCESS_TOKEN_EXPIRE_MINUTES=60

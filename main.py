@@ -25,6 +25,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -399,6 +400,7 @@ async def login(
     }
 
 #details about the user 
+
 @app.get("/me")
 async def get_me(
     current_user: User = Depends(get_current_user),
@@ -414,12 +416,18 @@ async def get_me(
         "id": current_user.id,
         "name": current_user.name,
         "email": current_user.email,
+
+        "telegram_connected": (
+            current_user.telegram_id is not None
+        ),
+
         "registration_code": (
             registration_token.code
             if registration_token
             else None
         )
-        
     }
+
+
 
 
