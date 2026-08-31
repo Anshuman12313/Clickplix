@@ -37,7 +37,7 @@ function App(){
                 element={<Camera/>}
                 />
                 <Route
-                path="/Login"
+                path="/login"
                 element={<Login/>}
                 />
         </Routes>
