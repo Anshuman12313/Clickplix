@@ -5,8 +5,10 @@ import Register from "./pages/Register"
 import Dashboard from "./pages/Dashboard";
 import CreateGroup from "./pages/CreateGroup"; 
 import Group from "./pages/Group";
-import Camera from "./pages/Camera"
-import Login from "./pages/Login"
+import Camera from "./pages/Camera";
+import Login from "./pages/Login";
+import Profile from "./pages/Profile";
+
 function App(){
     return(
         <BrowserRouter>
@@ -40,6 +42,11 @@ function App(){
                 path="/login"
                 element={<Login/>}
                 />
+                <Route path="/profile" element={<Profile />} />
+                <Route
+    path="/test"
+    element={<h1>TEST ROUTE WORKS</h1>}
+/>
         </Routes>
 
         </BrowserRouter>
